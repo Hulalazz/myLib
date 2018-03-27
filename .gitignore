@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*$py.class
+
+# Sphinx documentation
+docs/_build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+*.so
+
+# vim
+*~
+*.swp
+
