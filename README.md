@@ -16,7 +16,7 @@ The list are following:
    Note: sgd.py calculate the gradient using the so-called forward mode automatic differentiation method via operator overloading! Please check in sgd/ad directory if you are interested.
 
 To do list:
-  [] reversed mode automatic differentiation
-  [] optimized math functions including Remez algorithm
-  [] monte carlo sampling programs
+- [ ] reversed mode automatic differentiation
+- [ ] optimized math functions including Remez algorithm
+- [ ] monte carlo sampling programs
 
