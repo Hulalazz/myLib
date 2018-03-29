@@ -10,4 +10,7 @@ The list are following:
    * Adagrad
    * RMSprop
    * Adadelta
-   * Adam 
+   * Adam
+   Note: sgd.py calculate the gradient using the so-called forward mode auto-differentiation method via operator overloading! Please check in sgd/ad directory if you are intrested.
+
+

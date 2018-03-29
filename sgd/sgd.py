@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 #%matplotlib qt5
 
+#import my own autograd (only forward mode for now!) library
+import ad 
+import numpy as np
 import matplotlib.pyplot as plt
-import autograd.numpy as np
-from matplotlib.colors import LogNorm
 from matplotlib import animation
-
-from autograd import grad
-#from scipy.optimize import minimize
+from matplotlib.colors import LogNorm
 from collections import defaultdict
 from itertools import zip_longest
-
 
 class TrajectoryAnimation(animation.FuncAnimation):
     
     def __init__(self, *paths, labels=[], fig=None, ax=None, frames=None, 
-                 interval=30, repeat_delay=5, blit=True, **kwargs):
+                 interval=25, repeat_delay=50, blit=True, **kwargs):
 
         if fig is None:
             if ax is None:
@@ -53,29 +51,26 @@ class TrajectoryAnimation(animation.FuncAnimation):
         for line, point, path in zip(self.lines, self.points, self.paths):
             line.set_data(*path[::,:i])
             point.set_data(*path[::,i-1:i])
-#            print(i)
         return self.lines + self.points
-    
-
 
 ##
-f  = lambda x, y: (1.5 - x + x*y)**2 + (2.25 - x + x*y**2)**2 + (2.625 - x + x*y**3)**2
+lossfunc  = lambda x, y: (1.5 - x + x*y)**2 + (2.25 - x + x*y**2)**2 + (2.625 - x + x*y**3)**2
 
 xmin, xmax, xstep = -4., 4., .2
 ymin, ymax, ystep = -4., 4., .2
 
 x, y = np.meshgrid(np.arange(xmin, xmax + xstep, xstep), np.arange(ymin, ymax + ystep, ystep))
-z = f(x, y)
+z = lossfunc(x, y)
 
 minima_ = np.array([3., 0.5]).T
 
-
-def lossfunc(x):
-    return (1.5 - x[0] + x[0]*x[1])**2 + (2.25 - x[0] + x[0]*x[1]**2)**2 + \
-        (2.625 - x[0] + x[0]*x[1]**3)**2
+# calculate the grad
+def grad(func, x):
+    x1 = ad.var(x[0], [1,0])
+    x2 = ad.var(x[1], [0,1])
+    return func(x1, x2).dot
 
 methods = []
-
 
 x0 = np.array([1.1, 1.95])
 
@@ -84,9 +79,8 @@ def SGD(func, x0, path =[], eta = 1e-3, nIter = 200, tol = 1e-3):
     x = x0
     path.append(x)
     
-    gradf = grad(func)
     for i in range(nIter):
-        dx = gradf(x)
+        dx = grad(func, x)
         x = x - eta * dx  
         path.append(x)
         
@@ -99,19 +93,16 @@ methods.append(SGD.__name__)
 def MomentumSGD(func, x0, path =[], eta = 1e-3, beta = 0.9, nIter = 200, tol = 1e-3):
     x = x0
     momentum = np.zeros(x0.shape)
-    gradf = grad(func)
-    
     path.append(x0)
     
     for i in range(nIter):
-        dx = gradf(x)
+        dx = grad(func, x)
         momentum = beta * momentum - eta * dx
         x = x + momentum
         path.append(x)
     
         if (dx.dot(dx) < tol):
             break
-
 
 methods.append(MomentumSGD.__name__)
 
@@ -120,13 +111,11 @@ methods.append(MomentumSGD.__name__)
 def NAG(func, x0, path =[], eta = 1e-3, beta = 0.9, nIter = 200, tol = 1e-3):
     x = x0
     momentum = np.zeros(x0.shape)
-    gradf = grad(func)
-    
     path.append(x0)
     
     for i in range(nIter):        
         xp = x + beta * momentum
-        dxp = gradf(xp)
+        dxp = grad(func, xp)
         
         momentum = beta * momentum - eta * dxp
         x = x + momentum
@@ -135,21 +124,16 @@ def NAG(func, x0, path =[], eta = 1e-3, beta = 0.9, nIter = 200, tol = 1e-3):
         if (dxp.dot(dxp) < tol):
             break
 
-
 methods.append(NAG.__name__)
-
 
 #Adagrad
 def Adagrad(func, x0, path =[], eta = 1.2, epsilon=1e-8, nIter = 200, tol = 1e-3):
     x = x0
-    gradf = grad(func)
-    
     path.append(x0)
-    
     gradsum = np.zeros(x0.shape)
     
     for i in range(nIter):
-        dx = gradf(x)        
+        dx = grad(func, x)        
         gradsum = gradsum + dx**2        
         x = x -eta * dx /(np.sqrt(gradsum) + epsilon)
         path.append(x)
@@ -157,21 +141,18 @@ def Adagrad(func, x0, path =[], eta = 1.2, epsilon=1e-8, nIter = 200, tol = 1e-3
         if (dx.dot(dx) < tol):
             break
 
-
 methods.append(Adagrad.__name__)
 
 #RMSprop
 def RMSprop(func, x0, path =[], eta = 0.1, beta = 0.9, epsilon=1e-8, 
         nIter = 200, tol = 5e-3):
     x = x0
-    gradf = grad(func)
-    
     path.append(x0)
     
     gradsum = np.zeros(x0.shape)
     
     for i in range(nIter):
-        dx = gradf(x)        
+        dx = grad(func, x)        
         gradsum = beta * gradsum + (1 - beta) * dx**2
         x = x -eta * dx /(np.sqrt(gradsum) + epsilon)
         path.append(x)
@@ -187,22 +168,19 @@ methods.append(RMSprop.__name__)
 def Adadelta(func, x0, path =[], beta = 0.2, epsilon = 1e-3, 
         nIter = 200, tol = 5e-3):
     x = x0    
-    gradf = grad(func)    
     path.append(x0)
     
     gradsum = np.zeros(x0.shape)       
     xsum = np.zeros(x0.shape)    
     
     for i in range(nIter):
-        dx = gradf(x)       
+        dx = grad(func, x)       
         gradsum = beta * gradsum + (1 - beta) * dx**2
         deltax = - (np.sqrt(xsum) + epsilon) / (np.sqrt(gradsum) + epsilon) * dx                       
         xsum = beta * xsum + (1-beta) * deltax**2
-        
         x = x + deltax
         path.append(x)
         
-   
         if (dx.dot(dx) < tol):
             break
 
@@ -212,15 +190,13 @@ methods.append(Adadelta.__name__)
 def Adam(func, x0, path =[], eta = 0.06, beta1 = 0.75, beta2 = 0.75,  epsilon=1e-8, 
          nIter = 200, tol = 5e-3):
     x = x0
-    gradf = grad(func)
-    
     path.append(x0)
     
     m = np.zeros(x0.shape)
     v = np.zeros(x0.shape)
     
     for i in range(nIter):
-        dx = gradf(x)        
+        dx = grad(func, x)        
         m = beta1 * m + (1 - beta1) * dx
         v = beta2 * v + (1 - beta2) * dx**2
         
@@ -232,9 +208,7 @@ def Adam(func, x0, path =[], eta = 0.06, beta1 = 0.75, beta2 = 0.75,  epsilon=1e
         if (dx.dot(dx) < tol):
             break
 
-
 methods.append(Adam.__name__)
-
 
 
 tempath = defaultdict(list)
@@ -248,12 +222,8 @@ paths = [np.array(tempath[method]).T for method in methods]
 
 
 fig, ax = plt.subplots(figsize=(10, 6))
-
 ax.contour(x, y, z, levels=np.logspace(0, 5, 35), norm=LogNorm(), cmap=plt.cm.jet)
 ax.plot(*minima_, 'r*', markersize=20)
-
-ax.set_xlabel('$x$')
-ax.set_ylabel('$y$')
 
 ax.set_xlim((xmin, xmax))
 ax.set_ylim((ymin, ymax))
@@ -264,5 +234,7 @@ ax.legend(loc='upper right')
 
 plt.show()
 
-#anim.save('picture.gif', writer='imagemagick')
+#uncomment 'plt.show()' to save to gif
+#anim.save('sgdimg.gif', writer='imagemagick', dpi=72)
+
 
